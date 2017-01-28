@@ -84,8 +84,8 @@ namespace MapReduceWrapper
             foreach (var result in results)
             {
                 Console.WriteLine($"{result.Key} {(result.Value ? "Up" : "Down")}");
-                Environment.Exit(results.Any(pair => !pair.Value) ? 1 : 0);
             }
+            Environment.Exit(results.Any(pair => !pair.Value) ? 1 : 0);
         }
 
         static void StartNode()
