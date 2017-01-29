@@ -1,7 +1,10 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Threading.Tasks;
+using MapReduceWrapper.Cluster.Exceptions;
 
 namespace MapReduceWrapper.Cluster
 {
@@ -13,12 +16,12 @@ namespace MapReduceWrapper.Cluster
 
         public Cluster() : this(NodeManifest.Load("node.manifest"))
         {
-            
+
         }
 
         public Cluster(string path) : this(NodeManifest.Load(path))
         {
-            
+
         }
 
         private Cluster(NodeManifest manifest)
@@ -31,14 +34,24 @@ namespace MapReduceWrapper.Cluster
             return new TestResults(_manifest.ToDictionary(address => address, Ping));
         }
 
-        public void LoadProgram()
+        public void LoadProgram(string path)
         {
-            //todo implement uploading program to cluster
+            using (var stream = File.OpenRead(path))
+            {
+                foreach (IPAddress address in _manifest)
+                {
+                    WaitForSuccess(GetClient(address).PostAsync("load", new StreamContent(stream)), address);
+                    stream.Seek(0, SeekOrigin.Begin);
+                }
+            }
         }
 
         public void ExecuteProgram()
         {
-            //todo implement executing program on cluster
+            foreach (IPAddress address in _manifest)
+            {
+                WaitForSuccess(GetClient(address).PostAsync("run", new StringContent("")), address);
+            }
         }
 
         private bool Ping(IPAddress address)
@@ -46,13 +59,7 @@ namespace MapReduceWrapper.Cluster
             bool result = false;
             try
             {
-                string uri = $"http://{address}:80/";
-                HttpClient client = new HttpClient
-                {
-                    Timeout = TimeSpan.FromSeconds(3),
-                    BaseAddress = new Uri(uri)
-                };
-                var response = client.GetAsync("ping");
+                var response = GetClient(address).GetAsync("ping");
                 response.Wait();
                 result = response.Result.IsSuccessStatusCode;
             }
@@ -62,6 +69,26 @@ namespace MapReduceWrapper.Cluster
             }
 
             return result;
+        }
+
+        private HttpClient GetClient(IPAddress address)
+        {
+            string uri = $"http://{address}:80/";
+            HttpClient client = new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(3),
+                BaseAddress = new Uri(uri)
+            };
+            return client;
+        }
+
+        private void WaitForSuccess(Task<HttpResponseMessage> responseTask, IPAddress address)
+        {
+            responseTask.Wait();
+            if (!responseTask.Result.IsSuccessStatusCode)
+            {
+                throw new NodeException(address);
+            }
         }
     }
 }

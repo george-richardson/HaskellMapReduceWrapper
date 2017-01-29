@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using System.IO;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,7 +20,15 @@ namespace MapReduceWrapper.NodeMode
         {
             app.Run(async (context) =>
             {
-                if (context.Request.Path == "/ping")
+                if (context.Request.Path == "/load" && context.Request.Method == "POST")
+                {
+                    using (var stream = File.OpenWrite("JobExecutable"))
+                    {
+                        context.Request.Body.CopyTo(stream);
+                        stream.Flush();
+                    }
+                }
+                else if (context.Request.Path == "/ping")
                 {
                     await context.Response.WriteAsync("Pong");
                 }
