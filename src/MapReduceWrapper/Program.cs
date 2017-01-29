@@ -32,6 +32,7 @@ namespace MapReduceWrapper
                             var stack = new Stack();
                             stack.Build();
                             stack.Install();
+                            new Cluster.Cluster().LoadProgram("HaskellMapReduce-exe");
                             //Send the files to the cluster
                             break;
                         case "build":
