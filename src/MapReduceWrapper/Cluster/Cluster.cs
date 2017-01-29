@@ -9,6 +9,8 @@ namespace MapReduceWrapper.Cluster
     {
         private readonly NodeManifest _manifest;
 
+        public NodeManifest Manifest => _manifest;
+
         public Cluster() : this(NodeManifest.Load("node.manifest"))
         {
             
