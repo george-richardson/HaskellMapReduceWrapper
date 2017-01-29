@@ -16,6 +16,7 @@ namespace MapReduceWrapper
                     Environment.Exit(1);
                     break;
                 case 1:
+                    Cluster.Cluster cluster;
                     switch (args.First())
                     {
                         case "node":
@@ -32,7 +33,9 @@ namespace MapReduceWrapper
                             var stack = new Stack();
                             stack.Build();
                             stack.Install();
-                            new Cluster.Cluster().LoadProgram("HaskellMapReduce-exe");
+                            cluster = new Cluster.Cluster();
+                            cluster.LoadProgram("HaskellMapReduce-exe");
+                            cluster.ExecuteProgram();
                             //Send the files to the cluster
                             break;
                         case "build":
@@ -40,9 +43,9 @@ namespace MapReduceWrapper
                             new Stack().Build();
                             break;
                         case "exec":
-                            //Execute precompiled job
-                            new Stack().Install();
-                            //Send the files to the cluster
+                            cluster = new Cluster.Cluster();
+                            cluster.LoadProgram("HaskellMapReduce-exe");
+                            cluster.ExecuteProgram();
                             break;
                         case "--help":
                             PrintHelp();
