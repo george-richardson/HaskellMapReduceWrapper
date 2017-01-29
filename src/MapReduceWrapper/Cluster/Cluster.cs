@@ -40,7 +40,12 @@ namespace MapReduceWrapper.Cluster
             {
                 foreach (IPAddress address in _manifest)
                 {
-                    WaitForSuccess(GetClient(address).PostAsync("load", new StreamContent(stream)), address);
+                    using (Stream buffer = new MemoryStream())
+                    {
+                        stream.CopyTo(buffer);
+                        WaitForSuccess(GetClient(address).PostAsync("load", new StreamContent(buffer)), address);
+                    }
+                    
                     stream.Seek(0, SeekOrigin.Begin);
                 }
             }
