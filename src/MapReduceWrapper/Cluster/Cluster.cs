@@ -43,6 +43,7 @@ namespace MapReduceWrapper.Cluster
                     using (Stream buffer = new MemoryStream())
                     {
                         stream.CopyTo(buffer);
+                        buffer.Seek(0, SeekOrigin.Begin);
                         WaitForSuccess(GetClient(address).PostAsync("load", new StreamContent(buffer)), address);
                     }
                     
