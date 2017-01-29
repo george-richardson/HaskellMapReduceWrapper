@@ -64,6 +64,9 @@ namespace MapReduceWrapper
                                 case "print":
                                     PrintCluster();
                                     break;
+                                default:
+                                    PrintArgErr();
+                                    break;
                             }
                             break;
                         default:
