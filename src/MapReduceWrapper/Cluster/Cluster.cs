@@ -58,12 +58,6 @@ namespace MapReduceWrapper.Cluster
 
         public void ExecuteProgram(string path)
         {
-            //Start up job executable
-            foreach (IPAddress address in _manifest)
-            {
-                WaitForSuccess(GetClient(address, 80).PostAsync("run", new StringContent("")), address);
-            }
-
             //Load and split file.
             FileSplitter splitter = new FileSplitter(path, _manifest.Count());
 
@@ -78,7 +72,7 @@ namespace MapReduceWrapper.Cluster
                     sb.Append(line);
                     sb.Append('\n');
                 }
-                mapTasks.Add(address, GetClient(address, 81).PostAsync("map", new StringContent(sb.ToString())));
+                mapTasks.Add(address, GetClient(address, 80).PostAsync("map", new StringContent(sb.ToString())));
             }
 
             //Wait for maps to finish
@@ -126,7 +120,7 @@ namespace MapReduceWrapper.Cluster
                 new Dictionary<IPAddress, Task<HttpResponseMessage>>();
             foreach (KeyValuePair<IPAddress, KeysCount> nodeCount in nodeCounts)
             {
-                reduceTasks.Add(nodeCount.Key, GetClient(nodeCount.Key, 81)
+                reduceTasks.Add(nodeCount.Key, GetClient(nodeCount.Key, 80)
                     .PostAsync("reduce",
                         new StringContent(
                             JsonConvert.SerializeObject(new ReduceRequestJson

@@ -44,19 +44,65 @@ namespace MapReduceWrapper.NodeMode
                     }
                     Console.WriteLine("Job loading complete");
                 }
-                else if (context.Request.Path == "/run" && context.Request.Method == "POST")
+                else if (context.Request.Path == "/map" && context.Request.Method == "POST")
                 {
-                    Console.WriteLine("Received run command");
+                    string output;
+                    Console.WriteLine("Received map command");
                     Console.WriteLine("Starting job process");
+
+                    using (var proc = new Process ())
+                    {
+                        proc.StartInfo = new ProcessStartInfo
+                        {
+                            FileName = "JobExecutable",
+                            Arguments = "map",
+                            RedirectStandardInput = true,
+                            RedirectStandardOutput = true,
+                        };
+                        proc.Start();
+                        Console.WriteLine("Map started");
+
+                        using (var stdIn = proc.StandardInput)
+                        {
+                            stdIn.Write(new StreamReader(context.Request.Body).ReadToEnd());
+                        }
+
+                        proc.WaitForExit();
+                        Console.WriteLine("Map finished. Output: ");
+                        output = proc.StandardOutput.ReadToEnd();
+                        Console.WriteLine(output);
+                    }
+                    await context.Response.WriteAsync(output);
+                }
+                else if (context.Request.Path == "/map" && context.Request.Method == "POST")
+                {
+                    string output;
+                    Console.WriteLine("Received reduce command");
+                    Console.WriteLine("Starting job process");
+
                     using (var proc = new Process())
                     {
                         proc.StartInfo = new ProcessStartInfo
                         {
-                            FileName = "JobExecutable"
+                            FileName = "JobExecutable",
+                            Arguments = "reduce",
+                            RedirectStandardInput = true,
+                            RedirectStandardOutput = true,
                         };
                         proc.Start();
+                        Console.WriteLine("Reduce started");
+
+                        using (var stdIn = proc.StandardInput)
+                        {
+                            stdIn.Write(new StreamReader(context.Request.Body).ReadToEnd());
+                        }
+
+                        proc.WaitForExit();
+                        Console.WriteLine("Reduce finished. Output: ");
+                        output = proc.StandardOutput.ReadToEnd();
+                        Console.WriteLine(output);
                     }
-                    Console.WriteLine("Job started in background");
+                    await context.Response.WriteAsync(output);
                 }
                 else if (context.Request.Path == "/ping")
                 {
