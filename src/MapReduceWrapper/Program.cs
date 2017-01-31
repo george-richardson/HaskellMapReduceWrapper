@@ -28,24 +28,9 @@ namespace MapReduceWrapper
                             new Git().Clone();
                             new Stack().Setup();
                             break;
-                        case "run":
-                            //Build and execute the job.
-                            var stack = new Stack();
-                            stack.Build();
-                            stack.Install();
-                            cluster = new Cluster.Cluster();
-                            cluster.LoadProgram("HaskellMapReduce-exe");
-                            cluster.ExecuteProgram();
-                            //Send the files to the cluster
-                            break;
                         case "build":
                             //Build the job
                             new Stack().Build();
-                            break;
-                        case "exec":
-                            cluster = new Cluster.Cluster();
-                            cluster.LoadProgram("HaskellMapReduce-exe");
-                            cluster.ExecuteProgram();
                             break;
                         case "--help":
                             PrintHelp();
@@ -72,6 +57,20 @@ namespace MapReduceWrapper
                                     break;
                             }
                             break;
+                        case "run":
+                            //Build and execute the job.
+                            var stack = new Stack();
+                            stack.Build();
+                            stack.Install();
+                            cluster = new Cluster.Cluster();
+                            cluster.LoadProgram("HaskellMapReduce-exe");
+                            cluster.ExecuteProgram(args[1]);
+                            break;
+                        case "exec":
+                            cluster = new Cluster.Cluster();
+                            cluster.LoadProgram("HaskellMapReduce-exe");
+                            cluster.ExecuteProgram(args[1]);
+                            break;
                         default:
                             PrintArgErr();
                             break;
@@ -95,7 +94,7 @@ namespace MapReduceWrapper
         static void PingCluster()
         {
             Console.WriteLine("Pinging nodes...");
-            
+
             var cluster = new Cluster.Cluster();
             var results = cluster.Test();
 
