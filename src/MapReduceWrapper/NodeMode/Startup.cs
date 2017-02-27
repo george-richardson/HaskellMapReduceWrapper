@@ -109,9 +109,10 @@ namespace MapReduceWrapper.NodeMode
                                 throw new Exception("Node fault");
                             }
 
-                            Dictionary<dynamic, List<dynamic>> nodeData =
+                            Dictionary<dynamic, List<
+                            dynamic >> nodeData =
                                 JsonConvert.DeserializeObject<Dictionary<dynamic, List<dynamic>>>(
-                                    dataTask.Result.Content.ToString());
+                                    await dataTask.Result.Content.ReadAsStringAsync());
 
                             foreach (KeyValuePair<dynamic, List<dynamic>> pair in nodeData)
                             {
