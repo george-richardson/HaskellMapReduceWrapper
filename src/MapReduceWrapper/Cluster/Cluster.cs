@@ -56,7 +56,7 @@ namespace MapReduceWrapper.Cluster
             }
         }
 
-        public void ExecuteProgram(string path)
+        public async void ExecuteProgram(string path)
         {
             //Load and split file.
             FileSplitter splitter = new FileSplitter(path, _manifest.Count());
@@ -88,7 +88,7 @@ namespace MapReduceWrapper.Cluster
                 }
 
                 var json =
-                    JsonConvert.DeserializeObject<MapResponseJson>(pair.Value.Result.Content.ToString());
+                    JsonConvert.DeserializeObject<MapResponseJson>(await pair.Value.Result.Content.ReadAsStringAsync());
 
                 foreach (MapResponseJsonItem keyCount in json.Keys)
                 {
@@ -136,7 +136,7 @@ namespace MapReduceWrapper.Cluster
             StringBuilder builder = new StringBuilder();
             foreach (KeyValuePair<IPAddress, Task<HttpResponseMessage>> reduceTask in reduceTasks)
             {
-                string response = reduceTask.Value.Result.ToString();
+                string response = await reduceTask.Value.Result.Content.ReadAsStringAsync();
                 ReduceResponseJson responseJson = JsonConvert.DeserializeObject<ReduceResponseJson>(response);
                 foreach (var item in responseJson.Results)
                 {

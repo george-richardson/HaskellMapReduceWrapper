@@ -157,6 +157,7 @@ namespace MapReduceWrapper.NodeMode
                 }
                 else if (context.Request.Path == "/data" && context.Request.Method == "POST")
                 {
+                    Console.WriteLine("Data request. ");
                     List<dynamic> keys =
                         JsonConvert.DeserializeObject<List<dynamic>>(new StreamReader(context.Request.Body).ReadToEnd());
                     await context.Response.WriteAsync(JsonConvert.SerializeObject(DataStore.GetData(keys)));
