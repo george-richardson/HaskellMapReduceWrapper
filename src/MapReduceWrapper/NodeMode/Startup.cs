@@ -153,7 +153,7 @@ namespace MapReduceWrapper.NodeMode
                             var outputJson = JsonConvert.DeserializeObject<Dictionary<dynamic, dynamic>>(output);
                             result = new ReduceResponseJson()
                             {
-                                Results = outputJson.Select(pair => new ReduceResponseJsonItem { Key = pair.Key, Value = pair.Value }).ToList()
+                                Results = outputJson.Select(pair => new ReduceResponseJsonItem { Key = pair.Key.ToString(), Value = pair.Value.ToString() }).ToList()
                             };
                         }
                         await context.Response.WriteAsync(JsonConvert.SerializeObject(result));
