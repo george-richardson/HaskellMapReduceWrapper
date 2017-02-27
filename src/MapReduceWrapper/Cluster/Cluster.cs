@@ -59,9 +59,11 @@ namespace MapReduceWrapper.Cluster
         public async void ExecuteProgram(string path)
         {
             //Load and split file.
+            Console.WriteLine("Splitting");
             FileSplitter splitter = new FileSplitter(path, _manifest.Count());
 
             //Run the map.
+            Console.WriteLine("Mapping");
             Dictionary<IPAddress, Task<HttpResponseMessage>> mapTasks =
                 new Dictionary<IPAddress, Task<HttpResponseMessage>>();
             foreach (IPAddress address in _manifest)
@@ -116,6 +118,7 @@ namespace MapReduceWrapper.Cluster
             }
 
             //Run reduce
+            Console.WriteLine("Reducing");
             Dictionary<IPAddress, Task<HttpResponseMessage>> reduceTasks =
                 new Dictionary<IPAddress, Task<HttpResponseMessage>>();
             foreach (KeyValuePair<IPAddress, KeysCount> nodeCount in nodeCounts)
@@ -133,6 +136,7 @@ namespace MapReduceWrapper.Cluster
             Task.WaitAll(reduceTasks.Values.Cast<Task>().ToArray());
 
             //Get and compile results.
+            Console.WriteLine("Compiling results");
             StringBuilder builder = new StringBuilder();
             foreach (KeyValuePair<IPAddress, Task<HttpResponseMessage>> reduceTask in reduceTasks)
             {
