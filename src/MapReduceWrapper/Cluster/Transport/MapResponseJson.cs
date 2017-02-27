@@ -8,7 +8,7 @@ namespace MapReduceWrapper.Cluster.Transport
     }
     public class MapResponseJsonItem
     {
-        public string Key { get; set; }
+        public dynamic Key { get; set; }
         public int Count { get; set; }
     }
 }

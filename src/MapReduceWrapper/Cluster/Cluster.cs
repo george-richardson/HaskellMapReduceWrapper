@@ -163,7 +163,7 @@ namespace MapReduceWrapper.Cluster
             return result;
         }
 
-        private HttpClient GetClient(IPAddress address, int port)
+        public static HttpClient GetClient(IPAddress address, int port)
         {
             string uri = $"http://{address}:{port}/";
             HttpClient client = new HttpClient

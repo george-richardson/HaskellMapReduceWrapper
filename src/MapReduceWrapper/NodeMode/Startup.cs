@@ -1,11 +1,18 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
+using MapReduceWrapper.Cluster.Transport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace MapReduceWrapper.NodeMode
 {
@@ -70,16 +77,55 @@ namespace MapReduceWrapper.NodeMode
                         proc.WaitForExit();
                         Console.WriteLine("Map finished. Output: ");
                         output = proc.StandardOutput.ReadToEnd();
+                        DataStore.SetData(JsonConvert.DeserializeObject<Dictionary<dynamic, List<dynamic>>>(output));
                         Console.WriteLine(output);
                     }
-                    await context.Response.WriteAsync(output);
+                    await context.Response.WriteAsync(JsonConvert.SerializeObject(DataStore.GetKeyCounts()));
                 }
-                else if (context.Request.Path == "/map" && context.Request.Method == "POST")
+                else if (context.Request.Path == "/reduce" && context.Request.Method == "POST")
                 {
                     string output;
                     Console.WriteLine("Received reduce command");
-                    Console.WriteLine("Starting job process");
+                    Console.WriteLine("Building job data.");
+                    ReduceRequestJson requestJson;
+                    using (var sr = new StreamReader(context.Request.Body))
+                        requestJson = JsonConvert.DeserializeObject<ReduceRequestJson>(sr.ReadToEnd());
 
+                    List<Task<HttpResponseMessage>> dataTasks =
+                        requestJson.Nodes.Select(
+                                s =>
+                                    Cluster.Cluster.GetClient(IPAddress.Parse(s), 80)
+                                        .PostAsync("data", new StringContent(JsonConvert.SerializeObject(requestJson.Keys))))
+                            .ToList();
+                    Task.WaitAll(dataTasks.Cast<Task>().ToArray());
+
+                    Dictionary<dynamic, List<dynamic>> mapData = new Dictionary<dynamic, List<dynamic>>();
+                    foreach (Task<HttpResponseMessage> dataTask in dataTasks)
+                    {
+                        if (!dataTask.Result.IsSuccessStatusCode)
+                        {
+                            throw new Exception("Node fault");
+                        }
+
+                        Dictionary<dynamic, List<dynamic>> nodeData =
+                            JsonConvert.DeserializeObject<Dictionary<dynamic, List<dynamic>>>(
+                                dataTask.Result.Content.ToString());
+
+                        foreach (KeyValuePair<dynamic, List<dynamic>> pair in nodeData)
+                        {
+                            if (!mapData.ContainsKey(pair.Key))
+                            {
+                                mapData.Add(pair.Key, pair.Value);
+                            }
+                            else
+                            {
+                                ((List<dynamic>)mapData[pair.Key]).AddRange(pair.Value);
+                            }
+                        }
+                    }
+
+                    Console.WriteLine("Starting job process");
+                    ReduceResponseJson result;
                     using (var proc = new Process())
                     {
                         proc.StartInfo = new ProcessStartInfo
@@ -94,15 +140,26 @@ namespace MapReduceWrapper.NodeMode
 
                         using (var stdIn = proc.StandardInput)
                         {
-                            stdIn.Write(new StreamReader(context.Request.Body).ReadToEnd());
+                            stdIn.Write(JsonConvert.SerializeObject(mapData));
                         }
 
                         proc.WaitForExit();
                         Console.WriteLine("Reduce finished. Output: ");
                         output = proc.StandardOutput.ReadToEnd();
                         Console.WriteLine(output);
+                        var outputJson = JsonConvert.DeserializeObject<Dictionary<dynamic, dynamic>>(output);
+                        result = new ReduceResponseJson()
+                        {
+                            Results = outputJson.Select(pair => new ReduceResponseJsonItem {Key = pair.Key, Value = pair.Value}).ToList()
+                        };
                     }
-                    await context.Response.WriteAsync(output);
+                    await context.Response.WriteAsync(JsonConvert.SerializeObject(result));
+                }
+                else if (context.Request.Path == "/data" && context.Request.Method == "POST")
+                {
+                    List<dynamic> keys =
+                        JsonConvert.DeserializeObject<List<dynamic>>(new StreamReader(context.Request.Body).ReadToEnd());
+                    await context.Response.WriteAsync(JsonConvert.SerializeObject(DataStore.GetData(keys)));
                 }
                 else if (context.Request.Path == "/ping")
                 {
