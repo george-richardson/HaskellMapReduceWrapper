@@ -55,7 +55,6 @@ namespace MapReduceWrapper.NodeMode
                     }
                     else if (context.Request.Path == "/map" && context.Request.Method == "POST")
                     {
-                        string output;
                         Console.WriteLine("Received map command");
                         Console.WriteLine("Starting job process");
 
@@ -70,7 +69,7 @@ namespace MapReduceWrapper.NodeMode
                             };
                             proc.Start();
                             Console.WriteLine("Map started");
-
+                            Task<string> outputTask = proc.StandardOutput.ReadToEndAsync();
                             using (var stdIn = proc.StandardInput)
                             {
                                 stdIn.Write(new StreamReader(context.Request.Body).ReadToEnd());
@@ -78,7 +77,7 @@ namespace MapReduceWrapper.NodeMode
 
                             proc.WaitForExit();
                             Console.WriteLine("Map finished. Output: ");
-                            output = proc.StandardOutput.ReadToEnd();
+                            var output = outputTask.Result;
                             DataStore.SetData(JsonConvert.DeserializeObject<Dictionary<dynamic, List<dynamic>>>(output));
                             Console.WriteLine(output);
                         }
