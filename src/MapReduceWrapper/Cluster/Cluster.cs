@@ -110,16 +110,14 @@ namespace MapReduceWrapper.Cluster
                 Console.WriteLine($"{keyCounts.Count} keys");
                 Dictionary<IPAddress, KeysCount> nodeCounts = _manifest.ToDictionary(address => address,
                     address => new KeysCount());
+                IPAddress minNode = Manifest.First();
+                int minCount;
                 foreach (KeyValuePair<string, int> key in keyCounts)
                 {
-                    nodeCounts.Aggregate(
-                            (minNode, node) =>
-                                minNode.Equals(default(KeyValuePair<IPAddress, KeysCount>))
-                                    ? node
-                                    : node.Value.TotalCount < minNode.Value.TotalCount ? node : minNode)
-                        .Value.Add(key.Key, key.Value);
+                    nodeCounts[minNode].Add(key.Key, key.Value);
+                    minCount = nodeCounts.Min(pair => pair.Value.TotalCount);
+                    minNode = nodeCounts.First(pair => pair.Value.TotalCount == minCount).Key;
                 }
-
                 //Run reduce
                 Console.WriteLine("Reducing");
                 Dictionary<IPAddress, Task<HttpResponseMessage>> reduceTasks =
