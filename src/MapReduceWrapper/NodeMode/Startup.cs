@@ -76,16 +76,13 @@ namespace MapReduceWrapper.NodeMode
                             }
 
                             proc.WaitForExit();
-                            Console.WriteLine("Map finished. Output: ");
-                            var output = outputTask.Result;
-                            DataStore.SetData(JsonConvert.DeserializeObject<Dictionary<dynamic, List<dynamic>>>(output));
-                            Console.WriteLine(output);
+                            DataStore.SetData(JsonConvert.DeserializeObject<Dictionary<dynamic, List<dynamic>>>(outputTask.Result));
+                            Console.WriteLine("Map finished.");
                         }
                         await context.Response.WriteAsync(JsonConvert.SerializeObject(DataStore.GetKeyCounts()));
                     }
                     else if (context.Request.Path == "/reduce" && context.Request.Method == "POST")
                     {
-                        string output;
                         Console.WriteLine("Received reduce command");
                         Console.WriteLine("Building job data.");
                         ReduceRequestJson requestJson;
@@ -139,6 +136,7 @@ namespace MapReduceWrapper.NodeMode
                             };
                             proc.Start();
                             Console.WriteLine("Reduce started");
+                            Task<string> outputTask = proc.StandardOutput.ReadToEndAsync();
 
                             using (var stdIn = proc.StandardInput)
                             {
@@ -146,10 +144,8 @@ namespace MapReduceWrapper.NodeMode
                             }
 
                             proc.WaitForExit();
-                            Console.WriteLine("Reduce finished. Output: ");
-                            output = proc.StandardOutput.ReadToEnd();
-                            Console.WriteLine(output);
-                            var outputJson = JsonConvert.DeserializeObject<Dictionary<dynamic, dynamic>>(output);
+                            Console.WriteLine("Reduce finished.");
+                            var outputJson = JsonConvert.DeserializeObject<Dictionary<dynamic, dynamic>>(outputTask.Result);
                             result = new ReduceResponseJson()
                             {
                                 Results = outputJson.Select(pair => new ReduceResponseJsonItem { Key = pair.Key.ToString(), Value = pair.Value.ToString() }).ToList()
