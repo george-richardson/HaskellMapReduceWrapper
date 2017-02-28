@@ -108,6 +108,7 @@ namespace MapReduceWrapper.Cluster
                     }
                 }
                 Console.WriteLine($"{keyCounts.Count} keys");
+                Console.WriteLine($"Balancing reduce keys");
                 Dictionary<IPAddress, KeysCount> nodeCounts = _manifest.ToDictionary(address => address,
                     address => new KeysCount());
                 IPAddress minNode = Manifest.First();
@@ -118,6 +119,7 @@ namespace MapReduceWrapper.Cluster
                     minCount = nodeCounts.Min(pair => pair.Value.TotalCount);
                     minNode = nodeCounts.First(pair => pair.Value.TotalCount == minCount).Key;
                 }
+                Console.WriteLine($"{nodeCounts.Sum(pair => pair.Value.Keys.Count)} keys");
                 //Run reduce
                 Console.WriteLine("Reducing");
                 Dictionary<IPAddress, Task<HttpResponseMessage>> reduceTasks =
