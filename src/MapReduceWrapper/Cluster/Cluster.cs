@@ -58,96 +58,107 @@ namespace MapReduceWrapper.Cluster
 
         public async void ExecuteProgram(string path)
         {
-            //Load and split file.
-            Console.WriteLine("Splitting");
-            FileSplitter splitter = new FileSplitter(path, _manifest.Count());
-
-            //Run the map.
-            Console.WriteLine("Mapping");
-            Dictionary<IPAddress, Task<HttpResponseMessage>> mapTasks =
-                new Dictionary<IPAddress, Task<HttpResponseMessage>>();
-            foreach (IPAddress address in _manifest)
+            try
             {
-                StringBuilder sb = new StringBuilder();
-                foreach (var line in splitter.TakeOne())
+                //Load and split file.
+                Console.WriteLine("Splitting");
+                FileSplitter splitter = new FileSplitter(path, _manifest.Count());
+
+                //Run the map.
+                Console.WriteLine("Mapping");
+                Dictionary<IPAddress, Task<HttpResponseMessage>> mapTasks =
+                    new Dictionary<IPAddress, Task<HttpResponseMessage>>();
+                foreach (IPAddress address in _manifest)
                 {
-                    sb.Append(line);
-                    sb.Append('\n');
-                }
-                mapTasks.Add(address, GetClient(address, 80).PostAsync("map", new StringContent(sb.ToString())));
-            }
-
-            //Wait for maps to finish
-            Task.WaitAll(mapTasks.Values.Cast<Task>().ToArray());
-
-            //Co-ordinate reduce
-            Dictionary<string, int> keyCounts = new Dictionary<string, int>();
-            foreach (KeyValuePair<IPAddress, Task<HttpResponseMessage>> pair in mapTasks)
-            {
-                if (!pair.Value.Result.IsSuccessStatusCode)
-                {
-                    throw new Exception("Node fault");
-                }
-
-                var json =
-                    JsonConvert.DeserializeObject<MapResponseJson>(await pair.Value.Result.Content.ReadAsStringAsync());
-
-                foreach (MapResponseJsonItem keyCount in json.Keys)
-                {
-                    if (keyCounts.ContainsKey(keyCount.Key))
+                    StringBuilder sb = new StringBuilder();
+                    foreach (var line in splitter.TakeOne())
                     {
-                        keyCounts[keyCount.Key] += keyCount.Count;
+                        sb.Append(line);
+                        sb.Append('\n');
                     }
-                    else
-                    {
-                        keyCounts.Add(keyCount.Key, keyCount.Count);
-                    }
+                    mapTasks.Add(address, GetClient(address, 80).PostAsync("map", new StringContent(sb.ToString())));
                 }
-            }
 
-            Dictionary<IPAddress, KeysCount> nodeCounts = _manifest.ToDictionary(address => address,
-                address => new KeysCount());
-            foreach (KeyValuePair<string, int> key in keyCounts)
-            {
-                nodeCounts.Aggregate(
-                        (minNode, node) =>
-                            minNode.Equals(default(KeyValuePair<IPAddress, KeysCount>))
-                                ? node
-                                : node.Value.TotalCount < minNode.Value.TotalCount ? node : minNode)
-                    .Value.Add(key.Key, key.Value);
-            }
+                //Wait for maps to finish
+                Task.WaitAll(mapTasks.Values.Cast<Task>().ToArray());
 
-            //Run reduce
-            Console.WriteLine("Reducing");
-            Dictionary<IPAddress, Task<HttpResponseMessage>> reduceTasks =
-                new Dictionary<IPAddress, Task<HttpResponseMessage>>();
-            foreach (KeyValuePair<IPAddress, KeysCount> nodeCount in nodeCounts)
-            {
-                reduceTasks.Add(nodeCount.Key, GetClient(nodeCount.Key, 80)
-                    .PostAsync("reduce",
-                        new StringContent(
-                            JsonConvert.SerializeObject(new ReduceRequestJson
-                            {
-                                Keys = nodeCount.Value.Keys,
-                                Nodes = _manifest.Select(address => address.ToString()).ToList()
-                            }))));
-            }
-            //Wait for reduces to finish
-            Task.WaitAll(reduceTasks.Values.Cast<Task>().ToArray());
-
-            //Get and compile results.
-            Console.WriteLine("Compiling results");
-            StringBuilder builder = new StringBuilder();
-            foreach (KeyValuePair<IPAddress, Task<HttpResponseMessage>> reduceTask in reduceTasks)
-            {
-                string response = await reduceTask.Value.Result.Content.ReadAsStringAsync();
-                ReduceResponseJson responseJson = JsonConvert.DeserializeObject<ReduceResponseJson>(response);
-                foreach (var item in responseJson.Results)
+                //Co-ordinate reduce
+                Dictionary<string, int> keyCounts = new Dictionary<string, int>();
+                foreach (KeyValuePair<IPAddress, Task<HttpResponseMessage>> pair in mapTasks)
                 {
-                    builder.Append($"{item.Key} {item.Value}\n");
+                    if (!pair.Value.Result.IsSuccessStatusCode)
+                    {
+                        throw new Exception("Node fault");
+                    }
+
+                    var json =
+                        JsonConvert.DeserializeObject<MapResponseJson>(
+                            await pair.Value.Result.Content.ReadAsStringAsync());
+
+                    foreach (MapResponseJsonItem keyCount in json.Keys)
+                    {
+                        if (keyCounts.ContainsKey(keyCount.Key))
+                        {
+                            keyCounts[keyCount.Key] += keyCount.Count;
+                        }
+                        else
+                        {
+                            keyCounts.Add(keyCount.Key, keyCount.Count);
+                        }
+                    }
                 }
+
+                Dictionary<IPAddress, KeysCount> nodeCounts = _manifest.ToDictionary(address => address,
+                    address => new KeysCount());
+                foreach (KeyValuePair<string, int> key in keyCounts)
+                {
+                    nodeCounts.Aggregate(
+                            (minNode, node) =>
+                                minNode.Equals(default(KeyValuePair<IPAddress, KeysCount>))
+                                    ? node
+                                    : node.Value.TotalCount < minNode.Value.TotalCount ? node : minNode)
+                        .Value.Add(key.Key, key.Value);
+                }
+
+                //Run reduce
+                Console.WriteLine("Reducing");
+                Dictionary<IPAddress, Task<HttpResponseMessage>> reduceTasks =
+                    new Dictionary<IPAddress, Task<HttpResponseMessage>>();
+                foreach (KeyValuePair<IPAddress, KeysCount> nodeCount in nodeCounts)
+                {
+                    reduceTasks.Add(nodeCount.Key, GetClient(nodeCount.Key, 80)
+                        .PostAsync("reduce",
+                            new StringContent(
+                                JsonConvert.SerializeObject(new ReduceRequestJson
+                                {
+                                    Keys = nodeCount.Value.Keys,
+                                    Nodes = _manifest.Select(address => address.ToString()).ToList()
+                                }))));
+                }
+                //Wait for reduces to finish
+                Task.WaitAll(reduceTasks.Values.Cast<Task>().ToArray());
+
+                //Get and compile results.
+                Console.WriteLine("Compiling results");
+                StringBuilder builder = new StringBuilder();
+                foreach (KeyValuePair<IPAddress, Task<HttpResponseMessage>> reduceTask in reduceTasks)
+                {
+                    string response = await reduceTask.Value.Result.Content.ReadAsStringAsync();
+                    ReduceResponseJson responseJson = JsonConvert.DeserializeObject<ReduceResponseJson>(response);
+                    foreach (var item in responseJson.Results)
+                    {
+                        builder.Append($"{item.Key} {item.Value}\n");
+                    }
+                }
+                File.WriteAllText("output.txt", builder.ToString());
             }
-            File.WriteAllText("output.txt", builder.ToString());
+            catch (Exception e)
+            {
+                Console.Error.WriteLine(e.Message);
+                Console.Error.WriteLine(e.StackTrace);
+                throw;
+            }
+
         }
 
         private bool Ping(IPAddress address)
