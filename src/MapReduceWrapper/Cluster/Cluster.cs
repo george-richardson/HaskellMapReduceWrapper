@@ -107,7 +107,7 @@ namespace MapReduceWrapper.Cluster
                         }
                     }
                 }
-
+                Console.WriteLine($"{keyCounts.Count} keys");
                 Dictionary<IPAddress, KeysCount> nodeCounts = _manifest.ToDictionary(address => address,
                     address => new KeysCount());
                 foreach (KeyValuePair<string, int> key in keyCounts)

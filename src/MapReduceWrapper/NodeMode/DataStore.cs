@@ -27,5 +27,10 @@ namespace MapReduceWrapper.NodeMode
                     _data.Select(pair => new MapResponseJsonItem() {Count = pair.Value.Count, Key = pair.Key}).ToList()
             };
         }
+
+        public static int Count()
+        {
+            return _data.Count;
+        }
     }
 }

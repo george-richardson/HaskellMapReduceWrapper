@@ -77,7 +77,9 @@ namespace MapReduceWrapper.NodeMode
 
                             proc.WaitForExit();
                             DataStore.SetData(JsonConvert.DeserializeObject<Dictionary<dynamic, List<dynamic>>>(outputTask.Result));
+                            
                             Console.WriteLine("Map finished.");
+                            Console.WriteLine($"{DataStore.Count()} keys.");
                         }
                         await context.Response.WriteAsync(JsonConvert.SerializeObject(DataStore.GetKeyCounts()));
                     }
@@ -146,6 +148,7 @@ namespace MapReduceWrapper.NodeMode
                             proc.WaitForExit();
                             Console.WriteLine("Reduce finished.");
                             var outputJson = JsonConvert.DeserializeObject<Dictionary<dynamic, dynamic>>(outputTask.Result);
+                            Console.WriteLine($"{outputJson.Count} keys");
                             result = new ReduceResponseJson()
                             {
                                 Results = outputJson.Select(pair => new ReduceResponseJsonItem { Key = pair.Key.ToString(), Value = pair.Value.ToString() }).ToList()
