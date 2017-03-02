@@ -3,16 +3,17 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Threading.Tasks;
 using MapReduceWrapper.Cluster.Transport;
+using MapReduceWrapper.Manifest;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+// ReSharper disable UnusedMember.Global
+// ReSharper disable UnusedParameter.Global
+// ReSharper disable ClassNeverInstantiated.Global
 
 namespace MapReduceWrapper.NodeMode
 {
@@ -56,31 +57,13 @@ namespace MapReduceWrapper.NodeMode
                     else if (context.Request.Path == "/map" && context.Request.Method == "POST")
                     {
                         Console.WriteLine("Received map command");
-                        Console.WriteLine("Starting job process");
 
-                        using (var proc = new Process())
-                        {
-                            proc.StartInfo = new ProcessStartInfo
-                            {
-                                FileName = "JobExecutable",
-                                Arguments = "map",
-                                RedirectStandardInput = true,
-                                RedirectStandardOutput = true,
-                            };
-                            proc.Start();
-                            Console.WriteLine("Map started");
-                            Task<string> outputTask = proc.StandardOutput.ReadToEndAsync();
-                            using (var stdIn = proc.StandardInput)
-                            {
-                                stdIn.Write(new StreamReader(context.Request.Body).ReadToEnd());
-                            }
+                        DataStore.SetData(
+                            JsonConvert.DeserializeObject<Dictionary<dynamic, List<dynamic>>>(JobRunner.Run(
+                                JobType.Map, context.Request.Body)));
 
-                            proc.WaitForExit();
-                            DataStore.SetData(JsonConvert.DeserializeObject<Dictionary<dynamic, List<dynamic>>>(outputTask.Result));
-                            
-                            Console.WriteLine("Map finished.");
-                            Console.WriteLine($"{DataStore.Count()} keys.");
-                        }
+                        Console.WriteLine($"{DataStore.Count()} keys.");
+
                         await context.Response.WriteAsync(JsonConvert.SerializeObject(DataStore.GetKeyCounts()));
                     }
                     else if (context.Request.Path == "/reduce" && context.Request.Method == "POST")
@@ -91,28 +74,16 @@ namespace MapReduceWrapper.NodeMode
                         using (var sr = new StreamReader(context.Request.Body))
                             requestJson = JsonConvert.DeserializeObject<ReduceRequestJson>(sr.ReadToEnd());
 
-                        List<Task<HttpResponseMessage>> dataTasks =
-                            requestJson.Nodes.Select(
-                                    s =>
-                                        Cluster.Cluster.GetClient(IPAddress.Parse(s), 80)
-                                            .PostAsync("data", new StringContent(JsonConvert.SerializeObject(requestJson.Keys))))
-                                .ToList();
-                        Task.WaitAll(dataTasks.Cast<Task>().ToArray());
+                        string requestContent = JsonConvert.SerializeObject(requestJson.Keys);
+                        ManifestLoader.Validate(requestJson.Nodes);
+                        var clusterDataRequests = requestJson.Nodes.ToDictionary(node => node, node => requestContent);
+                        var clusterData = Cluster.Cluster.Post<Dictionary<dynamic, List<dynamic>>>("data",
+                            clusterDataRequests);
 
                         Dictionary<dynamic, List<dynamic>> mapData = new Dictionary<dynamic, List<dynamic>>();
-                        foreach (Task<HttpResponseMessage> dataTask in dataTasks)
+                        foreach (KeyValuePair<Node, Dictionary<dynamic, List<dynamic>>> clusterDatum in clusterData)
                         {
-                            if (!dataTask.Result.IsSuccessStatusCode)
-                            {
-                                throw new Exception("Node fault");
-                            }
-
-                            Dictionary<dynamic, List<
-                            dynamic >> nodeData =
-                                JsonConvert.DeserializeObject<Dictionary<dynamic, List<dynamic>>>(
-                                    await dataTask.Result.Content.ReadAsStringAsync());
-
-                            foreach (KeyValuePair<dynamic, List<dynamic>> pair in nodeData)
+                            foreach (KeyValuePair<dynamic, List<dynamic>> pair in clusterDatum.Value)
                             {
                                 if (!mapData.ContainsKey(pair.Key))
                                 {
@@ -125,35 +96,16 @@ namespace MapReduceWrapper.NodeMode
                             }
                         }
 
-                        Console.WriteLine("Starting job process");
-                        ReduceResponseJson result;
-                        using (var proc = new Process())
+                        var outputJson =
+                            JsonConvert.DeserializeObject<Dictionary<dynamic, dynamic>>(JobRunner.Run(JobType.Reduce,
+                                JsonConvert.SerializeObject(mapData)));
+
+                        var result = new ReduceResponseJson()
                         {
-                            proc.StartInfo = new ProcessStartInfo
-                            {
-                                FileName = "JobExecutable",
-                                Arguments = "reduce",
-                                RedirectStandardInput = true,
-                                RedirectStandardOutput = true,
-                            };
-                            proc.Start();
-                            Console.WriteLine("Reduce started");
-                            Task<string> outputTask = proc.StandardOutput.ReadToEndAsync();
+                            Results = outputJson.Select(pair => new ReduceResponseJsonItem { Key = pair.Key.ToString(), Value = pair.Value.ToString() }).ToList()
+                        };
 
-                            using (var stdIn = proc.StandardInput)
-                            {
-                                stdIn.Write(JsonConvert.SerializeObject(mapData));
-                            }
-
-                            proc.WaitForExit();
-                            Console.WriteLine("Reduce finished.");
-                            var outputJson = JsonConvert.DeserializeObject<Dictionary<dynamic, dynamic>>(outputTask.Result);
-                            Console.WriteLine($"{outputJson.Count} keys");
-                            result = new ReduceResponseJson()
-                            {
-                                Results = outputJson.Select(pair => new ReduceResponseJsonItem { Key = pair.Key.ToString(), Value = pair.Value.ToString() }).ToList()
-                            };
-                        }
+                        
                         await context.Response.WriteAsync(JsonConvert.SerializeObject(result));
                     }
                     else if (context.Request.Path == "/data" && context.Request.Method == "POST")

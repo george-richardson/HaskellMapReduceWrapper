@@ -2,53 +2,50 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using MapReduceWrapper.Cluster.Exceptions;
 using MapReduceWrapper.Cluster.Transport;
+using MapReduceWrapper.Manifest;
 using Newtonsoft.Json;
 
 namespace MapReduceWrapper.Cluster
 {
     public class Cluster
     {
-        private readonly NodeManifest _manifest;
+        private readonly List<Node> _manifest;
 
-        public NodeManifest Manifest => _manifest;
+        internal List<Node> Manifest => _manifest;
 
-        public Cluster() : this(NodeManifest.Load("node.manifest"))
+        public Cluster() : this(ManifestLoader.LoadFromPath("node.manifest"))
         {
 
         }
 
-        public Cluster(string path) : this(NodeManifest.Load(path))
-        {
-
-        }
-
-        private Cluster(NodeManifest manifest)
+        private Cluster(List<Node> manifest)
         {
             _manifest = manifest;
         }
 
         public TestResults Test()
         {
-            return new TestResults(_manifest.ToDictionary(address => address, Ping));
+            return
+                new TestResults(Get("ping", _manifest)
+                    .ToDictionary(pair => pair.Key, pair => pair.Value.IsSuccessStatusCode));
         }
 
         public void LoadProgram(string path)
         {
             using (var stream = File.OpenRead(path))
             {
-                foreach (IPAddress address in _manifest)
+                foreach (Node node in _manifest)
                 {
                     using (Stream buffer = new MemoryStream())
                     {
                         stream.CopyTo(buffer);
                         buffer.Seek(0, SeekOrigin.Begin);
-                        WaitForSuccess(GetClient(address, 80).PostAsync("load", new StreamContent(buffer)), address);
+                        WaitForSuccess(node.Client.PostAsync("load", new StreamContent(buffer)), node);
                     }
 
                     stream.Seek(0, SeekOrigin.Begin);
@@ -56,145 +53,116 @@ namespace MapReduceWrapper.Cluster
             }
         }
 
-        public async void ExecuteProgram(string path)
+        public void ExecuteProgram(string path)
         {
-            try
+            //Load and split file.
+            Console.WriteLine("Splitting");
+            FileSplitter splitter = new FileSplitter(path, _manifest.Count);
+
+            //Run the map.
+            Console.WriteLine("Mapping");
+
+            Dictionary<Node, string> mapInputs = _manifest.ToDictionary(node => node, node =>
             {
-                //Load and split file.
-                Console.WriteLine("Splitting");
-                FileSplitter splitter = new FileSplitter(path, _manifest.Count());
-
-                //Run the map.
-                Console.WriteLine("Mapping");
-                Dictionary<IPAddress, Task<HttpResponseMessage>> mapTasks =
-                    new Dictionary<IPAddress, Task<HttpResponseMessage>>();
-                foreach (IPAddress address in _manifest)
+                StringBuilder sb = new StringBuilder();
+                foreach (var line in splitter.TakeOne())
                 {
-                    StringBuilder sb = new StringBuilder();
-                    foreach (var line in splitter.TakeOne())
-                    {
-                        sb.Append(line);
-                        sb.Append('\n');
-                    }
-                    mapTasks.Add(address, GetClient(address, 80).PostAsync("map", new StringContent(sb.ToString())));
+                    sb.Append(line);
+                    sb.Append('\n');
                 }
+                return sb.ToString();
+            });
+            var mapResults = Post<MapResponseJson>("map", mapInputs);
 
-                //Wait for maps to finish
-                Task.WaitAll(mapTasks.Values.Cast<Task>().ToArray());
-
-                //Co-ordinate reduce
-                Dictionary<string, int> keyCounts = new Dictionary<string, int>();
-                foreach (KeyValuePair<IPAddress, Task<HttpResponseMessage>> pair in mapTasks)
-                {
-                    if (!pair.Value.Result.IsSuccessStatusCode)
-                    {
-                        throw new Exception("Node fault");
-                    }
-
-                    var json =
-                        JsonConvert.DeserializeObject<MapResponseJson>(
-                            await pair.Value.Result.Content.ReadAsStringAsync());
-
-                    foreach (MapResponseJsonItem keyCount in json.Keys)
-                    {
-                        if (keyCounts.ContainsKey(keyCount.Key))
-                        {
-                            keyCounts[keyCount.Key] += keyCount.Count;
-                        }
-                        else
-                        {
-                            keyCounts.Add(keyCount.Key, keyCount.Count);
-                        }
-                    }
-                }
-                Console.WriteLine($"{keyCounts.Count} keys");
-                Console.WriteLine($"Balancing reduce keys");
-                Dictionary<IPAddress, KeysCount> nodeCounts = _manifest.ToDictionary(address => address,
-                    address => new KeysCount());
-                IPAddress minNode = Manifest.First();
-                int minCount;
-                foreach (KeyValuePair<string, int> key in keyCounts)
-                {
-                    nodeCounts[minNode].Add(key.Key, key.Value);
-                    minCount = nodeCounts.Min(pair => pair.Value.TotalCount);
-                    minNode = nodeCounts.First(pair => pair.Value.TotalCount == minCount).Key;
-                }
-                Console.WriteLine($"{nodeCounts.Sum(pair => pair.Value.Keys.Count)} keys");
-                //Run reduce
-                Console.WriteLine("Reducing");
-                Dictionary<IPAddress, Task<HttpResponseMessage>> reduceTasks =
-                    new Dictionary<IPAddress, Task<HttpResponseMessage>>();
-                foreach (KeyValuePair<IPAddress, KeysCount> nodeCount in nodeCounts)
-                {
-                    reduceTasks.Add(nodeCount.Key, GetClient(nodeCount.Key, 80)
-                        .PostAsync("reduce",
-                            new StringContent(
-                                JsonConvert.SerializeObject(new ReduceRequestJson
-                                {
-                                    Keys = nodeCount.Value.Keys,
-                                    Nodes = _manifest.Select(address => address.ToString()).ToList()
-                                }))));
-                }
-                //Wait for reduces to finish
-                Task.WaitAll(reduceTasks.Values.Cast<Task>().ToArray());
-
-                //Get and compile results.
-                Console.WriteLine("Compiling results");
-                StringBuilder builder = new StringBuilder();
-                foreach (KeyValuePair<IPAddress, Task<HttpResponseMessage>> reduceTask in reduceTasks)
-                {
-                    string response = await reduceTask.Value.Result.Content.ReadAsStringAsync();
-                    ReduceResponseJson responseJson = JsonConvert.DeserializeObject<ReduceResponseJson>(response);
-                    foreach (var item in responseJson.Results)
-                    {
-                        builder.Append($"{item.Key} {item.Value}\n");
-                    }
-                }
-                File.WriteAllText("output.txt", builder.ToString());
-            }
-            catch (Exception e)
+            //Co-ordinate reduce
+            Dictionary<string, int> keyCounts = new Dictionary<string, int>();
+            Console.WriteLine("Balancing reduce keys");
+            foreach (KeyValuePair<Node, MapResponseJson> pair in mapResults)
             {
-                Console.Error.WriteLine(e.Message);
-                Console.Error.WriteLine(e.StackTrace);
-                throw;
+                foreach (MapResponseJsonItem keyCount in pair.Value.Keys)
+                {
+                    if (keyCounts.ContainsKey(keyCount.Key))
+                    {
+                        keyCounts[keyCount.Key] += keyCount.Count;
+                    }
+                    else
+                    {
+                        keyCounts.Add(keyCount.Key, keyCount.Count);
+                    }
+                }
             }
+            Dictionary<Node, KeysCount> nodeCounts = _manifest.ToDictionary(node => node,
+                address => new KeysCount());
+            Node minNode = _manifest.First();
+            int minCount;
+            foreach (KeyValuePair<string, int> key in keyCounts)
+            {
+                nodeCounts[minNode].Add(key.Key, key.Value);
+                minCount = nodeCounts.Min(pair => pair.Value.TotalCount);
+                minNode = nodeCounts.First(pair => pair.Value.TotalCount == minCount).Key;
+            }
+            Console.WriteLine($"{nodeCounts.Sum(pair => pair.Value.Keys.Count)} keys");
+
+            //Run reduce
+            Console.WriteLine("Reducing");
+            Dictionary<Node, ReduceResponseJson> responses = Post<ReduceResponseJson>("reduce",
+                nodeCounts.ToDictionary(pair => pair.Key, pair => JsonConvert.SerializeObject(new ReduceRequestJson
+                {
+                    Keys = pair.Value.Keys,
+                    Nodes = _manifest
+                })));
+
+            //Get and compile results.
+            Console.WriteLine("Compiling results");
+            StringBuilder builder = new StringBuilder();
+            foreach (KeyValuePair<Node, ReduceResponseJson> reduceTask in responses)
+            {
+                foreach (var item in reduceTask.Value.Results)
+                {
+                    builder.Append($"{item.Key} {item.Value}\n");
+                }
+            }
+            File.WriteAllText("output.txt", builder.ToString());
 
         }
 
-        private bool Ping(IPAddress address)
-        {
-            bool result = false;
-            try
-            {
-                var response = GetClient(address, 80).GetAsync("ping");
-                response.Wait();
-                result = response.Result.IsSuccessStatusCode;
-            }
-            catch
-            {
-                //ignore
-            }
-
-            return result;
-        }
-
-        public static HttpClient GetClient(IPAddress address, int port)
-        {
-            string uri = $"http://{address}:{port}/";
-            HttpClient client = new HttpClient
-            {
-                BaseAddress = new Uri(uri)
-            };
-            return client;
-        }
-
-        private void WaitForSuccess(Task<HttpResponseMessage> responseTask, IPAddress address)
+        private void WaitForSuccess(Task<HttpResponseMessage> responseTask, Node node)
         {
             responseTask.Wait();
             if (!responseTask.Result.IsSuccessStatusCode)
             {
-                throw new NodeException(address);
+                throw new NodeException(node);
             }
+        }
+
+        public static Dictionary<Node, HttpResponseMessage> Get(string uri, List<Node> nodes)
+        {
+            Dictionary<Node, Task<HttpResponseMessage>> tasks = nodes.ToDictionary(node => node,
+                node => node.Client.GetAsync(uri));
+            Task.WaitAll(tasks.Values.Cast<Task>().ToArray());
+            return tasks.ToDictionary(pair => pair.Key, pair => pair.Value.Result);
+        }
+
+        public static Dictionary<Node, HttpResponseMessage> Post(string uri, Dictionary<Node, string> inputs)
+        {
+            Dictionary<Node, Task<HttpResponseMessage>> tasks = inputs.ToDictionary(pair => pair.Key,
+                pair => pair.Key.Client.PostAsync(uri, new StringContent(pair.Value)));
+            Task.WaitAll(tasks.Values.Cast<Task>().ToArray());
+            var errorNode = tasks.FirstOrDefault(pair => !pair.Value.Result.IsSuccessStatusCode).Key;
+            if (errorNode != null)
+                throw new NodeException(errorNode);
+            return tasks.ToDictionary(pair => pair.Key, pair => pair.Value.Result);
+        }
+
+        public static Dictionary<Node, T> Post<T>(string uri, Dictionary<Node, string> inputs)
+        {
+            Dictionary<Node, HttpResponseMessage> results = Post(uri, inputs);
+            return results.ToDictionary(pair => pair.Key, pair =>
+            {
+                var readTask = pair.Value.Content.ReadAsStringAsync();
+                readTask.Wait();
+                return JsonConvert.DeserializeObject<T>(readTask.Result);
+            });
         }
     }
 }

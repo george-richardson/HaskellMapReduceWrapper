@@ -23,6 +23,7 @@ namespace MapReduceWrapper.NodeMode
 
         public static void Start()
         {
+            // ReSharper disable once UnusedVariable
             var nodeServer = new NodeServer();
         }
     }

@@ -1,11 +1,11 @@
 ﻿using System;
-using System.Net;
+using MapReduceWrapper.Manifest;
 
 namespace MapReduceWrapper.Cluster.Exceptions
 {
     public class NodeException : Exception
     {
-        public NodeException(IPAddress address) : base($"Node at {address} has encountered an error")
+        public NodeException(Node node) : base($"Node at {node.IP}:{node.Port} has encountered an error")
         {
             
         }

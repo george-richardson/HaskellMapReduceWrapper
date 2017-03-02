@@ -1,12 +1,12 @@
 ﻿using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Net;
+using MapReduceWrapper.Manifest;
 
 namespace MapReduceWrapper.Cluster
 {
-    public class TestResults : ReadOnlyDictionary<IPAddress, bool>
+    public class TestResults : ReadOnlyDictionary<Node, bool>
     {
-        internal TestResults(IDictionary<IPAddress, bool> dictionary) : base(dictionary)
+        internal TestResults(IDictionary<Node, bool> dictionary) : base(dictionary)
         {
         }
     }

@@ -17,14 +17,9 @@
             Run(new[] {"setup"});
         }
 
-        public void Install(string path)
+        public void Install(string path = ".")
         {
             Run(new[] {"install", "--local-bin-path", path});
-        }
-
-        public void Install()
-        {
-            Install(".");
         }
     }
 }
