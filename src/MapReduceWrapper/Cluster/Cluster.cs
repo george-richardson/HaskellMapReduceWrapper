@@ -7,7 +7,6 @@ using System.Text;
 using System.Threading.Tasks;
 using MapReduceWrapper.Cluster.Exceptions;
 using MapReduceWrapper.Cluster.Transport;
-using MapReduceWrapper.Manifest;
 using Newtonsoft.Json;
 
 namespace MapReduceWrapper.Cluster
@@ -18,21 +17,16 @@ namespace MapReduceWrapper.Cluster
 
         internal List<Node> Manifest => _manifest;
 
-        public Cluster() : this(ManifestLoader.LoadFromPath("node.manifest"))
+        public Cluster()
         {
-
+            _manifest = LoadFromPath("node.manifest");
         }
 
-        private Cluster(List<Node> manifest)
-        {
-            _manifest = manifest;
-        }
-
-        public TestResults Test()
+        public Dictionary<Node, bool> Test()
         {
             return
-                new TestResults(Get("ping", _manifest)
-                    .ToDictionary(pair => pair.Key, pair => pair.Value.IsSuccessStatusCode));
+                Get("ping", _manifest)
+                    .ToDictionary(pair => pair.Key, pair => pair.Value.IsSuccessStatusCode);
         }
 
         public void LoadProgram(string path)
@@ -135,7 +129,7 @@ namespace MapReduceWrapper.Cluster
             }
         }
 
-        public static Dictionary<Node, HttpResponseMessage> Get(string uri, List<Node> nodes)
+        private static Dictionary<Node, HttpResponseMessage> Get(string uri, List<Node> nodes)
         {
             Dictionary<Node, Task<HttpResponseMessage>> tasks = nodes.ToDictionary(node => node,
                 node => node.Client.GetAsync(uri));
@@ -143,7 +137,7 @@ namespace MapReduceWrapper.Cluster
             return tasks.ToDictionary(pair => pair.Key, pair => pair.Value.Result);
         }
 
-        public static Dictionary<Node, HttpResponseMessage> Post(string uri, Dictionary<Node, string> inputs)
+        private static Dictionary<Node, HttpResponseMessage> Post(string uri, Dictionary<Node, string> inputs)
         {
             Dictionary<Node, Task<HttpResponseMessage>> tasks = inputs.ToDictionary(pair => pair.Key,
                 pair => pair.Key.Client.PostAsync(uri, new StringContent(pair.Value)));
@@ -163,6 +157,40 @@ namespace MapReduceWrapper.Cluster
                 readTask.Wait();
                 return JsonConvert.DeserializeObject<T>(readTask.Result);
             });
+        }
+
+        public static List<Node> LoadFromPath(string path)
+        {
+            try
+            {
+                return LoadFromJson(File.ReadAllText(path));
+            }
+            catch (FileNotFoundException)
+            {
+                throw new MissingManifestException();
+            }
+        }
+
+        public static List<Node> LoadFromJson(string json)
+        {
+            try
+            {
+                List<Node> nodes = JsonConvert.DeserializeObject<List<Node>>(json);
+                Validate(nodes);
+                return nodes;
+            }
+            catch (JsonException)
+            {
+                throw new MalformedManifestException();
+            }
+        }
+
+        public static void Validate(List<Node> nodes)
+        {
+            if (nodes.Any(node => !node.Validate()))
+            {
+                throw new MalformedManifestException();
+            }
         }
     }
 }

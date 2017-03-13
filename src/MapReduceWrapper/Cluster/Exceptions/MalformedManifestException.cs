@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace MapReduceWrapper.Manifest.Exceptions
+namespace MapReduceWrapper.Cluster.Exceptions
 {
     public class MalformedManifestException : Exception
     {

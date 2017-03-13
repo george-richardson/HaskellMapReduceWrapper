@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using MapReduceWrapper.Manifest;
 
 namespace MapReduceWrapper.Cluster.Transport
 {

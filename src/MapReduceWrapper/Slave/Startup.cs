@@ -3,19 +3,20 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using MapReduceWrapper.Cluster;
 using MapReduceWrapper.Cluster.Transport;
-using MapReduceWrapper.Manifest;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+
 // ReSharper disable UnusedMember.Global
 // ReSharper disable UnusedParameter.Global
 // ReSharper disable ClassNeverInstantiated.Global
 
-namespace MapReduceWrapper.NodeMode
+namespace MapReduceWrapper.Slave
 {
     public class Startup
     {
@@ -75,7 +76,7 @@ namespace MapReduceWrapper.NodeMode
                             requestJson = JsonConvert.DeserializeObject<ReduceRequestJson>(sr.ReadToEnd());
 
                         string requestContent = JsonConvert.SerializeObject(requestJson.Keys);
-                        ManifestLoader.Validate(requestJson.Nodes);
+                        Cluster.Cluster.Validate(requestJson.Nodes);
                         var clusterDataRequests = requestJson.Nodes.ToDictionary(node => node, node => requestContent);
                         var clusterData = Cluster.Cluster.Post<Dictionary<dynamic, List<dynamic>>>("data",
                             clusterDataRequests);

@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace MapReduceWrapper.NodeMode
+namespace MapReduceWrapper.Slave
 {
     public static class JobRunner
     {

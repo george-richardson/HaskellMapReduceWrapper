@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Net;
 using System.Net.Http;
+
 // ReSharper disable UnusedAutoPropertyAccessor.Global
 // ReSharper disable AutoPropertyCanBeMadeGetOnly.Global
 
-namespace MapReduceWrapper.Manifest
+namespace MapReduceWrapper.Cluster
 {
     // ReSharper disable once ClassNeverInstantiated.Global
     public class Node

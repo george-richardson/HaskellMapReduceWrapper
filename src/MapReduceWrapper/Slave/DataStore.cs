@@ -2,7 +2,7 @@
 using System.Linq;
 using MapReduceWrapper.Cluster.Transport;
 
-namespace MapReduceWrapper.NodeMode
+namespace MapReduceWrapper.Slave
 {
     public static class DataStore
     {
