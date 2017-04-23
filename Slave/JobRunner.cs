@@ -9,15 +9,8 @@ namespace MapReduceWrapper.Slave
     {
         public static string Run(JobType type, Stream stream)
         {
-            using (var proc = new Process())
+            using (var proc = GenerateProcess(type))
             {
-                proc.StartInfo = new ProcessStartInfo
-                {
-                    FileName = "JobExecutable",
-                    Arguments = type == JobType.Map ? "map" : "reduce",
-                    RedirectStandardInput = true,
-                    RedirectStandardOutput = true,
-                };
                 DateTime start = DateTime.Now;
                 proc.Start();
                 Task<string> outputTask = proc.StandardOutput.ReadToEndAsync();
@@ -37,8 +30,35 @@ namespace MapReduceWrapper.Slave
 
         public static string Run(JobType type, String input)
         {
-            using (var sr = new StringReader(input))
-                return Run(type, sr.ReadToEnd());
+            using (var proc = GenerateProcess(type))
+            {
+                DateTime start = DateTime.Now;
+                proc.Start();
+                Task<string> outputTask = proc.StandardOutput.ReadToEndAsync();
+                Console.WriteLine($"{type} started.");
+
+                using (var stdIn = proc.StandardInput) 
+                    stdIn.Write(input);
+
+                proc.WaitForExit();
+                DateTime end = DateTime.Now;
+                Console.WriteLine($"{type} finished in {(end-start).TotalSeconds} seconds.");
+                return outputTask.Result;
+            }
+        }
+
+        private static Process GenerateProcess(JobType type) {
+            return new Process() { StartInfo = GenerateProcessStartInfo(type) };
+        }
+
+        private static ProcessStartInfo GenerateProcessStartInfo(JobType type) {
+            return new ProcessStartInfo
+                {
+                    FileName = "JobExecutable",
+                    Arguments = type == JobType.Map ? "map" : "reduce",
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                };
         }
     }
 
