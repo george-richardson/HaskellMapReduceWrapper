@@ -7,7 +7,7 @@ namespace MapReduceWrapper.Slave
 {
     public static class JobRunner
     {
-        public static string Run(JobType type, string input)
+        public static string Run(JobType type, Stream stream)
         {
             using (var proc = new Process())
             {
@@ -23,8 +23,10 @@ namespace MapReduceWrapper.Slave
                 Task<string> outputTask = proc.StandardOutput.ReadToEndAsync();
                 Console.WriteLine($"{type} started.");
 
-                using (var stdIn = proc.StandardInput)
-                    stdIn.Write(input);
+                using (var stdIn = proc.StandardInput.BaseStream) {
+                    stream.CopyTo(stdIn);
+                    stdIn.Flush();
+                }
 
                 proc.WaitForExit();
                 DateTime end = DateTime.Now;
@@ -33,9 +35,9 @@ namespace MapReduceWrapper.Slave
             }
         }
 
-        public static string Run(JobType type, Stream stream)
+        public static string Run(JobType type, String input)
         {
-            using (var sr = new StreamReader(stream))
+            using (var sr = new StringReader(input))
                 return Run(type, sr.ReadToEnd());
         }
     }
