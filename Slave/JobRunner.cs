@@ -18,8 +18,8 @@ namespace MapReduceWrapper.Slave
                     RedirectStandardInput = true,
                     RedirectStandardOutput = true,
                 };
-                Task<string> outputTask = proc.StandardOutput.ReadToEndAsync();
                 proc.Start();
+                Task<string> outputTask = proc.StandardOutput.ReadToEndAsync();
                 Console.WriteLine($"{type} started.");
 
                 using (var stdIn = proc.StandardInput)
