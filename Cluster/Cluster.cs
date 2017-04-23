@@ -49,13 +49,16 @@ namespace MapReduceWrapper.Cluster
 
         public void ExecuteProgram(string path)
         {
+            DateTime start = DateTime.Now;
+
             //Load and split file.
             Console.WriteLine("Splitting");
             FileSplitter splitter = new FileSplitter(path, _manifest.Count);
+            DateTime splitEnd = DateTime.Now;
+            Console.WriteLine($"in {(splitEnd - start).TotalSeconds} seconds");
 
             //Run the map.
             Console.WriteLine("Mapping");
-
             Dictionary<Node, string> mapInputs = _manifest.ToDictionary(node => node, node =>
             {
                 StringBuilder sb = new StringBuilder();
@@ -67,6 +70,9 @@ namespace MapReduceWrapper.Cluster
                 return sb.ToString();
             });
             var mapResults = Post<MapResponseJson>("map", mapInputs);
+
+            DateTime mapEnd = DateTime.Now;
+            Console.WriteLine($"in {(mapEnd - splitEnd).TotalSeconds} seconds");
 
             //Co-ordinate reduce
             Dictionary<string, int> keyCounts = new Dictionary<string, int>();
@@ -97,6 +103,9 @@ namespace MapReduceWrapper.Cluster
             }
             Console.WriteLine($"{nodeCounts.Sum(pair => pair.Value.Keys.Count)} keys");
 
+            DateTime balanceEnd = DateTime.Now;
+            Console.WriteLine($"in {(balanceEnd - mapEnd).TotalSeconds} seconds");
+
             //Run reduce
             Console.WriteLine("Reducing");
             Dictionary<Node, ReduceResponseJson> responses = Post<ReduceResponseJson>("reduce",
@@ -105,6 +114,9 @@ namespace MapReduceWrapper.Cluster
                     Keys = pair.Value.Keys,
                     Nodes = _manifest
                 })));
+            
+            DateTime reduceEnd = DateTime.Now;
+            Console.WriteLine($"in {(reduceEnd - balanceEnd).TotalSeconds} seconds");
 
             //Get and compile results.
             Console.WriteLine("Compiling results");
@@ -117,7 +129,9 @@ namespace MapReduceWrapper.Cluster
                 }
             }
             File.WriteAllText("output.txt", builder.ToString());
-
+            
+            DateTime end = DateTime.Now;
+            Console.WriteLine($"Total: {(end - start).TotalSeconds} seconds");
         }
 
         private void WaitForSuccess(Task<HttpResponseMessage> responseTask, Node node)

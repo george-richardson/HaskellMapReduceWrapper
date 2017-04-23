@@ -23,7 +23,8 @@ namespace MapReduceWrapper.Cluster
                 string uri = $"http://{IP}:{Port}/";
                 HttpClient client = new HttpClient
                 {
-                    BaseAddress = new Uri(uri)
+                    BaseAddress = new Uri(uri),
+                    Timeout = TimeSpan.FromHours(2)
                 };
                 Client = client;
                 return true;

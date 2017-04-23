@@ -18,6 +18,7 @@ namespace MapReduceWrapper.Slave
                     RedirectStandardInput = true,
                     RedirectStandardOutput = true,
                 };
+                DateTime start = DateTime.Now;
                 proc.Start();
                 Task<string> outputTask = proc.StandardOutput.ReadToEndAsync();
                 Console.WriteLine($"{type} started.");
@@ -26,7 +27,8 @@ namespace MapReduceWrapper.Slave
                     stdIn.Write(input);
 
                 proc.WaitForExit();
-                Console.WriteLine($"{type} finished.");
+                DateTime end = DateTime.Now;
+                Console.WriteLine($"{type} finished in {(end-start).TotalSeconds} seconds.");
                 return outputTask.Result;
             }
         }
